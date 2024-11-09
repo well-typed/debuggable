@@ -24,10 +24,17 @@ module System.IO.NonInterleaved (
 import Control.Concurrent
 import Control.Monad.Catch (MonadMask, ExitCase(..), generalBracket)
 import Control.Monad.IO.Class
+import Data.Hashable (Hashable(..))
+import Data.HashMap.Strict (HashMap)
 import Data.IORef
+import Data.List (intercalate)
+import GHC.Stack
+import System.Environment
 import System.IO
 import System.IO.Temp (getCanonicalTemporaryDirectory)
 import System.IO.Unsafe
+
+import qualified Data.HashMap.Strict as HashMap
 
 {-------------------------------------------------------------------------------
   Output functions
@@ -36,6 +43,11 @@ import System.IO.Unsafe
 -- | Non-interleaved version of 'putStr'
 --
 -- Concurrent calls to 'niPutStr' will not result in interleaved output.
+--
+-- The first output will create a new temporary file (typically in @/tmp@,
+-- depending on the OS), and a message is written to 'stderr' with the name of
+-- the file. If you prefer to specify which file to write to, you can set the
+-- @NIIO_OUTPUT@ environment variable.
 niPutStr :: MonadIO m => String -> m ()
 niPutStr str = liftIO $ withMVar niHandle $ \h -> hPutStr h str >> hFlush h
 
@@ -93,15 +105,25 @@ niTraceShowM = niTraceM . show
 -- | Unique value
 --
 -- See 'niGetUnique'.
-newtype NiUnique = NiUnique Int
-  deriving newtype (Show, Eq)
+data NiUnique = NiUnique CallSite Int
+  deriving stock (Eq)
 
--- | Get a unique value
+instance Show NiUnique where
+  show (NiUnique cs i) = "\"" ++ prettyCallSite cs ++ "/" ++ show i ++ "\""
+
+-- | Get a unique value (useful for correlating different log messages)
 --
--- Every call to 'niGetUnique' will return a different (unique) value. This can
--- be useful to correlate different log messages with each other.
-niGetUnique :: MonadIO m => m NiUnique
-niGetUnique = liftIO $ atomicModifyIORef niUnique $ \i -> (succ i, NiUnique i)
+-- Each call to 'niGetUnique' will return a value that is unique relative to
+-- where 'niGetUnique' is called from.
+niGetUnique :: (MonadIO m, HasCallStack) => m NiUnique
+niGetUnique = withFrozenCallStack $
+    liftIO $ atomicModifyIORef niUniques aux
+  where
+    aux :: HashMap CallSite Int -> (HashMap CallSite Int, NiUnique)
+    aux uniques = (HashMap.insert cs (succ i) uniques, NiUnique cs i)
+      where
+        cs = callSite
+        i  = HashMap.findWithDefault 1 callSite uniques
 
 -- | Print a message before and after an action
 --
@@ -111,46 +133,119 @@ niGetUnique = liftIO $ atomicModifyIORef niUnique $ \i -> (succ i, NiUnique i)
 -- NOTE: We provide an (orphan) 'Functor' instance for 'ExitCase', which can
 -- be useful in cases where @a@ is not showable.
 niBracket ::
-     (MonadIO m, MonadMask m)
+     (MonadIO m, MonadMask m, HasCallStack)
   => (NiUnique -> String)                -- ^ Message prior to the action
-  -> (NiUnique -> ExitCase a -> String)  -- ^ Message after
+  -> ((NiUnique, ExitCase a) -> String)  -- ^ Message after
   -> (NiUnique -> m a)
   -> m a
-niBracket before after act = fmap (\(a, ()) -> a) $ do
-    i <- niGetUnique
-    generalBracket
-      (niPutStr $ before i)
-      (\() -> niPutStr . after i)
-      (\() -> act i)
+niBracket before after act = withFrozenCallStack $
+    fmap (\(a, ()) -> a) $ do
+      i <- niGetUnique
+      generalBracket
+        (niPutStr $ before i)
+        (\() -> niPutStr . curry after i)
+        (\() -> act i)
 
 -- | Like 'niBracket', but adding linebreaks.
 --
 -- 'niBracketLn' is to 'niBracket' as 'niPutStrLn' is to 'niPutStr'.
+--
+-- A common way to invoke 'niBracketLn' is
+--
+-- > niBracketLn show show $ \i -> ..
+--
+-- resulting in output such as
+--
+-- > "<./Example/File.hs:131:5>/1"
+-- > ..
+-- > ("<./Example/File.hs:131:5>/1",ExitCaseSuccess ())
+--
+-- When nesting calls to 'niBracketLn', it can be useful to pair the uniques
+-- in order to get better correlation:
+--
+-- > niBracketLn show show $ \i -> do
+-- >   ..
+-- >   niBracketLn (show . (i,)) (show . (i,)) $ \j -> ..
+-- >   ..
+--
+-- resulting in output such as
+--
+-- > "<./Example/File.hs:131:5>/1"
+-- > ..
+-- > ("<./Example/File.hs:131:5>/1","<./Example/File.hs:128:13>/1")
+-- > ..
+-- > ("<./Example/File.hs:131:5>/1",("<./Example/File.hs:128:13>/1",ExitCaseSuccess ()))
+-- > ..
+-- > ("<./Example/File.hs:131:5>/1",ExitCaseSuccess ())
 niBracketLn ::
-     (MonadIO m, MonadMask m)
+     (MonadIO m, MonadMask m, HasCallStack)
   => (NiUnique -> String)
-  -> (NiUnique -> ExitCase a -> String)
+  -> ((NiUnique, ExitCase a) -> String)
   -> (NiUnique -> m a)
   -> m a
-niBracketLn before after =
+niBracketLn before after = withFrozenCallStack $
     niBracket
-      (\i -> before i ++ "\n")
-      (\i -> (++ "\n") . after i)
+      ((++ "\n") . before)
+      ((++ "\n") . after)
 
 deriving stock instance Functor ExitCase
 
 {-------------------------------------------------------------------------------
-  Internal
+  Internal: callsites
+-------------------------------------------------------------------------------}
+
+data CallSite =
+    CallSite SrcLoc
+  | UnknownCallSite
+  deriving stock (Eq)
+
+prettyCallSite :: CallSite -> String
+prettyCallSite UnknownCallSite = "<unknown>"
+prettyCallSite (CallSite loc)  = concat [
+      "<"
+    , intercalate ":" [
+        srcLocFile loc
+      , show $ srcLocStartLine loc
+      , show $ srcLocStartCol loc
+      ]
+    , ">"
+    ]
+
+instance Hashable CallSite where
+  hashWithSalt salt = hashWithSalt salt . aux
+    where
+      aux :: CallSite -> Maybe String
+      aux (CallSite loc)  = Just $ prettySrcLoc loc
+      aux UnknownCallSite = Nothing
+
+callSite :: HasCallStack => CallSite
+callSite = aux callStack
+  where
+    aux :: CallStack -> CallSite
+    aux cs =
+        case getCallStack cs of
+          (_, loc) : _ -> CallSite loc
+          []           -> UnknownCallSite
+
+{-------------------------------------------------------------------------------
+  Internal: globals
 -------------------------------------------------------------------------------}
 
 niHandle :: MVar Handle
 {-# NOINLINE niHandle #-}
 niHandle = unsafePerformIO $ do
-    tmpDir  <- getCanonicalTemporaryDirectory
-    (fp, h) <- openTempFile tmpDir "niio"
-    hPutStrLn stderr $ "niio output to " ++ fp
-    newMVar h
+    mOutput <- lookupEnv "NIIO_OUTPUT"
+    case mOutput of
+      Nothing -> do
+        tmpDir  <- getCanonicalTemporaryDirectory
+        (fp, h) <- openTempFile tmpDir "niio"
+        hPutStrLn stderr $ "niio output to " ++ fp
+        newMVar h
+      Just fp -> do
+        hPutStrLn stderr $ "niio output to " ++ fp
+        newMVar =<< openFile fp WriteMode
 
-niUnique :: IORef Int
-{-# NOINLINE niUnique #-}
-niUnique = unsafePerformIO $ newIORef 1
+niUniques :: IORef (HashMap CallSite Int)
+{-# NOINLINE niUniques #-}
+niUniques = unsafePerformIO $ newIORef HashMap.empty
+
