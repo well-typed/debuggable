@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module System.IO.NonInterleaved (
     -- * Output functions
     niPutStr
@@ -9,9 +11,13 @@ module System.IO.NonInterleaved (
   , niTraceShowId
   , niTraceM
   , niTraceShowM
+    -- * Derived functionality
+  , niBracket
+  , niBracketLn
   ) where
 
 import Control.Concurrent
+import Control.Monad.Catch (ExitCase(..), generalBracket)
 import System.IO
 import System.IO.Temp (getCanonicalTemporaryDirectory)
 import System.IO.Unsafe
@@ -72,6 +78,32 @@ niTraceM str = niTrace str $ pure ()
 -- See 'niTrace' for additional discussion.
 niTraceShowM :: (Applicative m, Show a) => a -> m ()
 niTraceShowM = niTraceM . show
+
+{-------------------------------------------------------------------------------
+  Derived functionality
+-------------------------------------------------------------------------------}
+
+-- | Print a message before and after an action
+--
+-- NOTE: We provide an (orphan) 'Functor' instance for 'ExitCase', which can
+-- be useful in cases where @a@ is not showable.
+niBracket ::
+     String                  -- ^ Message to print prior to the action
+  -> (ExitCase a -> String)  -- ^ Message to print after
+  -> IO a -> IO a
+niBracket before after act = fmap (\(a, ()) -> a) $
+    generalBracket
+      (niPutStr before)
+      (\() -> niPutStr . after)
+      (\() -> act)
+
+-- | Like 'niBracket', but adding linebreaks.
+--
+-- 'niBracketLn' is to 'niBracket' as 'niPutStrLn' is to 'niPutStr'.
+niBracketLn :: String -> (ExitCase a -> String) -> IO a -> IO a
+niBracketLn before after = niBracket (before ++ "\n") ((++ "\n") . after)
+
+deriving stock instance Functor ExitCase
 
 {-------------------------------------------------------------------------------
   Internal
