@@ -24,6 +24,7 @@ common lang
   default-extensions:
       DeriveFunctor
       DerivingStrategies
+      GeneralizedNewtypeDeriving
       StandaloneDeriving
 
 library
