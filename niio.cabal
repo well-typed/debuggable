@@ -25,6 +25,7 @@ common lang
       DeriveFunctor
       DerivingStrategies
       GeneralizedNewtypeDeriving
+      NamedFieldPuns
       StandaloneDeriving
 
 library
