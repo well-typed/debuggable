@@ -14,11 +14,12 @@ module System.IO.NonInterleaved (
   , niTraceShowId
   , niTraceM
   , niTraceShowM
-    -- * Additional functionality
+    -- * Uniques
   , NiUnique -- opaque
   , niGetUnique
+  , niPutStrAt
+    -- * Derived functionality
   , niBracket
-  , niBracketLn
   ) where
 
 import Control.Concurrent
@@ -99,7 +100,7 @@ niTraceShowM :: (Applicative m, Show a) => a -> m ()
 niTraceShowM = niTraceM . show
 
 {-------------------------------------------------------------------------------
-  Additional functionality
+  Uniques
 -------------------------------------------------------------------------------}
 
 -- | Unique value
@@ -125,69 +126,81 @@ niGetUnique = withFrozenCallStack $
         cs = callSite
         i  = HashMap.findWithDefault 1 callSite uniques
 
+-- | Output with 'NiUnique' prefix
+--
+-- Example:
+--
+-- > niPutStrAt [i, j] $ "foo: " ++ E.displayException e
+--
+-- which could result in output such as
+--
+-- > ["<./Example/File.hs:131:5>/1","<./Example/File.hs:125:13>/1"]
+-- >   foo: ExampleException
+-- >   HasCallStack backtrace:
+-- >     collectBacktraces, called at (..)
+-- >     toExceptionWithBacktrace, called at (..)
+-- >     throwIO, called at (..)
+niPutStrAt :: MonadIO m => [NiUnique] -> String -> m ()
+niPutStrAt is str =
+    niPutStrLn $
+      case lines str of
+        [one] -> show is ++ " " ++ one
+        many  -> intercalate "\n" $ show is : map ("  " ++) many
+
+{-------------------------------------------------------------------------------
+  Derived functionality
+-------------------------------------------------------------------------------}
+
 -- | Print a message before and after an action
 --
 -- In order to make it easier to correlate the messages before and after the
 -- action, we give both a newly created 'Unique' (see 'niGetUnique').
 --
+-- A common way to invoke 'niBracket' is
+--
+-- > niBracket (\i -> niPutStrAt [i] "start") (\i -> niPutStrAt [i] . show) $ \i ->
+--
+-- resulting in output such as
+--
+-- > ["<./Example/File.hs:131:5>/1"] start
+-- > ..
+-- > ["<./Example/File.hs:131:5>/1"] ExitCaseSuccess ()
+--
+-- When nesting calls to 'niBracket', it can be useful to combine the uniques
+-- in order to get better correlation:
+--
+-- > niBracket (\i -> niPutStrAt [i] "start") (\i -> niPutStrAt [i] . show) $ \i ->
+-- >   ..
+-- >   niBracket (\j -> niPutStrAt [i, j] "start") (\j -> niPutStrAt [i, j] . show) $ \j ->
+-- >     ..
+--
+-- resulting in output such as
+--
+-- > ["<./Example/File.hs:131:5>/1"] start
+-- > ..
+-- > ["<./Example/File.hs:131:5>/1","<./Example/File.hs:125:13>/1"] start
+-- > ..
+-- > ["<./Example/File.hs:131:5>/1","<./Example/File.hs:125:13>/1"] ExitCaseSuccess ()
+-- > ..
+-- > ["<./Example/File.hs:131:5>/1"] ExitCaseSuccess ()
+--
 -- NOTE: We provide an (orphan) 'Functor' instance for 'ExitCase', which can
 -- be useful in cases where @a@ is not showable.
 niBracket ::
      (MonadIO m, MonadMask m, HasCallStack)
-  => (NiUnique -> String)                -- ^ Message prior to the action
-  -> ((NiUnique, ExitCase a) -> String)  -- ^ Message after
+  => (NiUnique -> m ())                  -- ^ Prior to the action
+  -> (NiUnique -> ExitCase a -> m ())  -- ^ After
   -> (NiUnique -> m a)
   -> m a
 niBracket before after act = withFrozenCallStack $
     fmap (\(a, ()) -> a) $ do
       i <- niGetUnique
       generalBracket
-        (niPutStr $ before i)
-        (\() -> niPutStr . curry after i)
+        (before i)
+        (\() -> after i)
         (\() -> act i)
 
--- | Like 'niBracket', but adding linebreaks.
---
--- 'niBracketLn' is to 'niBracket' as 'niPutStrLn' is to 'niPutStr'.
---
--- A common way to invoke 'niBracketLn' is
---
--- > niBracketLn show show $ \i -> ..
---
--- resulting in output such as
---
--- > "<./Example/File.hs:131:5>/1"
--- > ..
--- > ("<./Example/File.hs:131:5>/1",ExitCaseSuccess ())
---
--- When nesting calls to 'niBracketLn', it can be useful to pair the uniques
--- in order to get better correlation:
---
--- > niBracketLn show show $ \i -> do
--- >   ..
--- >   niBracketLn (show . (i,)) (show . (i,)) $ \j -> ..
--- >   ..
---
--- resulting in output such as
---
--- > "<./Example/File.hs:131:5>/1"
--- > ..
--- > ("<./Example/File.hs:131:5>/1","<./Example/File.hs:128:13>/1")
--- > ..
--- > ("<./Example/File.hs:131:5>/1",("<./Example/File.hs:128:13>/1",ExitCaseSuccess ()))
--- > ..
--- > ("<./Example/File.hs:131:5>/1",ExitCaseSuccess ())
-niBracketLn ::
-     (MonadIO m, MonadMask m, HasCallStack)
-  => (NiUnique -> String)
-  -> ((NiUnique, ExitCase a) -> String)
-  -> (NiUnique -> m a)
-  -> m a
-niBracketLn before after = withFrozenCallStack $
-    niBracket
-      ((++ "\n") . before)
-      ((++ "\n") . after)
-
+-- | See 'niBracket'
 deriving stock instance Functor ExitCase
 
 {-------------------------------------------------------------------------------
@@ -248,4 +261,3 @@ niHandle = unsafePerformIO $ do
 niUniques :: IORef (HashMap CallSite Int)
 {-# NOINLINE niUniques #-}
 niUniques = unsafePerformIO $ newIORef HashMap.empty
-
