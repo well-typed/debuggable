@@ -24,7 +24,7 @@ import System.IO.Unsafe
 --
 -- Concurrent calls to 'niPutStr' will not result in interleaved output.
 niPutStr :: String -> IO ()
-niPutStr str = withMVar niHandle $ \h -> hPutStr h str
+niPutStr str = withMVar niHandle $ \h -> hPutStr h str >> hFlush h
 
 -- | Non-interleaved version of 'putStrLn'
 --
