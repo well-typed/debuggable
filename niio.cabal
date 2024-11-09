@@ -1,7 +1,7 @@
 cabal-version:   3.0
 name:            niio
 version:         0.1.0
-synopsis:        Simple IO functions that guarantee non-interleaved output
+synopsis:        Functions for debugging that guarantee non-interleaved output
 license:         BSD-3-Clause
 license-file:    LICENSE
 author:          Edsko de Vries
