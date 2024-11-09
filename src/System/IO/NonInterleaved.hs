@@ -17,7 +17,8 @@ module System.IO.NonInterleaved (
   ) where
 
 import Control.Concurrent
-import Control.Monad.Catch (ExitCase(..), generalBracket)
+import Control.Monad.Catch (MonadMask, ExitCase(..), generalBracket)
+import Control.Monad.IO.Class
 import System.IO
 import System.IO.Temp (getCanonicalTemporaryDirectory)
 import System.IO.Unsafe
@@ -29,19 +30,19 @@ import System.IO.Unsafe
 -- | Non-interleaved version of 'putStr'
 --
 -- Concurrent calls to 'niPutStr' will not result in interleaved output.
-niPutStr :: String -> IO ()
-niPutStr str = withMVar niHandle $ \h -> hPutStr h str >> hFlush h
+niPutStr :: MonadIO m => String -> m ()
+niPutStr str = liftIO $ withMVar niHandle $ \h -> hPutStr h str >> hFlush h
 
 -- | Non-interleaved version of 'putStrLn'
 --
 -- See 'niPutStr' for additional discussion.
-niPutStrLn :: String -> IO ()
+niPutStrLn :: MonadIO m => String -> m ()
 niPutStrLn = niPutStr . (++ "\n")
 
 -- | Non-interleaved version of 'print'
 --
 -- See 'niPutStr' for additional discussion.
-niPrint :: Show a => a -> IO ()
+niPrint :: MonadIO m => Show a => a -> m ()
 niPrint = niPutStrLn . show
 
 {-------------------------------------------------------------------------------
@@ -88,9 +89,10 @@ niTraceShowM = niTraceM . show
 -- NOTE: We provide an (orphan) 'Functor' instance for 'ExitCase', which can
 -- be useful in cases where @a@ is not showable.
 niBracket ::
-     String                  -- ^ Message to print prior to the action
+     (MonadIO m, MonadMask m)
+  => String                  -- ^ Message to print prior to the action
   -> (ExitCase a -> String)  -- ^ Message to print after
-  -> IO a -> IO a
+  -> m a -> m a
 niBracket before after act = fmap (\(a, ()) -> a) $
     generalBracket
       (niPutStr before)
@@ -100,7 +102,9 @@ niBracket before after act = fmap (\(a, ()) -> a) $
 -- | Like 'niBracket', but adding linebreaks.
 --
 -- 'niBracketLn' is to 'niBracket' as 'niPutStrLn' is to 'niPutStr'.
-niBracketLn :: String -> (ExitCase a -> String) -> IO a -> IO a
+niBracketLn ::
+     (MonadIO m, MonadMask m)
+  => String -> (ExitCase a -> String) -> m a -> m a
 niBracketLn before after = niBracket (before ++ "\n") ((++ "\n") . after)
 
 deriving stock instance Functor ExitCase
