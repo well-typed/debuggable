@@ -1,5 +1,8 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
+-- | Functions for non-interleaved output
+--
+-- Intended for unqualified import.
 module System.IO.NonInterleaved (
     -- * Output functions
     niPutStr
@@ -12,7 +15,7 @@ module System.IO.NonInterleaved (
   , niTraceM
   , niTraceShowM
     -- * Additional functionality
-  , Unique -- opaque
+  , NiUnique -- opaque
   , niGetUnique
   , niBracket
   , niBracketLn
@@ -90,15 +93,15 @@ niTraceShowM = niTraceM . show
 -- | Unique value
 --
 -- See 'niGetUnique'.
-newtype Unique = Unique Int
+newtype NiUnique = NiUnique Int
   deriving newtype (Show, Eq)
 
 -- | Get a unique value
 --
 -- Every call to 'niGetUnique' will return a different (unique) value. This can
 -- be useful to correlate different log messages with each other.
-niGetUnique :: MonadIO m => m Unique
-niGetUnique = liftIO $ atomicModifyIORef niUnique $ \i -> (succ i, Unique i)
+niGetUnique :: MonadIO m => m NiUnique
+niGetUnique = liftIO $ atomicModifyIORef niUnique $ \i -> (succ i, NiUnique i)
 
 -- | Print a message before and after an action
 --
@@ -109,9 +112,9 @@ niGetUnique = liftIO $ atomicModifyIORef niUnique $ \i -> (succ i, Unique i)
 -- be useful in cases where @a@ is not showable.
 niBracket ::
      (MonadIO m, MonadMask m)
-  => (Unique -> String)                -- ^ Message to print prior to the action
-  -> (Unique -> ExitCase a -> String)  -- ^ Message to print after
-  -> (Unique -> m a)
+  => (NiUnique -> String)                -- ^ Message prior to the action
+  -> (NiUnique -> ExitCase a -> String)  -- ^ Message after
+  -> (NiUnique -> m a)
   -> m a
 niBracket before after act = fmap (\(a, ()) -> a) $ do
     i <- niGetUnique
@@ -125,9 +128,9 @@ niBracket before after act = fmap (\(a, ()) -> a) $ do
 -- 'niBracketLn' is to 'niBracket' as 'niPutStrLn' is to 'niPutStr'.
 niBracketLn ::
      (MonadIO m, MonadMask m)
-  => (Unique -> String)
-  -> (Unique -> ExitCase a -> String)
-  -> (Unique -> m a)
+  => (NiUnique -> String)
+  -> (NiUnique -> ExitCase a -> String)
+  -> (NiUnique -> m a)
   -> m a
 niBracketLn before after =
     niBracket
