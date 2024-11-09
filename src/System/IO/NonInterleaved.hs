@@ -116,15 +116,37 @@ instance Show NiUnique where
 --
 -- Each call to 'niGetUnique' will return a value that is unique relative to
 -- where 'niGetUnique' is called from.
+--
+-- /NOTE/: If you are seeing @<unknown>@ when showing the 'NiUnique', this
+-- means that the calling function does not have a 'HasCallStack' annotation:
+--
+-- > yourFunction :: HasCallStack => IO ()
+-- > yourFunction = do
+-- >     i <- niGetUnique
+-- >     ..
+--
+-- once you add this annotation, you should see @yourFunction@ instead of
+-- @<unknown>@. Similarly, if you have local function definitions, it may
+-- be useful to give those 'HasCallStack' constraints of their own:
+--
+-- > yourFunction :: HasCallStack => IO ()
+-- > yourFunction = ..
+-- >   where
+-- >     someLocalFn :: HasCallStack => IO ()
+-- >     someLocalFn = do
+-- >         i <- niGetUnique
+-- >         ..
+--
+-- In this example the 'HasCallStack' constraint on 'someLocalFn' means that
+-- the 'NiUnique' will show @someLocalFn@ instead of @yourFunction@.
 niGetUnique :: (MonadIO m, HasCallStack) => m NiUnique
 niGetUnique = withFrozenCallStack $
-    liftIO $ atomicModifyIORef niUniques aux
-  where
-    aux :: HashMap CallSite Int -> (HashMap CallSite Int, NiUnique)
-    aux uniques = (HashMap.insert cs (succ i) uniques, NiUnique cs i)
-      where
+    liftIO $ atomicModifyIORef niUniques $ \uniques ->
+      let
         cs = callSite
         i  = HashMap.findWithDefault 1 callSite uniques
+      in
+        (HashMap.insert cs (succ i) uniques, NiUnique cs i)
 
 -- | Output with 'NiUnique' prefix
 --
@@ -132,9 +154,9 @@ niGetUnique = withFrozenCallStack $
 --
 -- > niPutStrAt [i, j] $ "foo: " ++ E.displayException e
 --
--- which could result in output such as
+-- results in output such as
 --
--- > ["<./Example/File.hs:131:5>/1","<./Example/File.hs:125:13>/1"]
+-- > ["exampleFun(./Example/File.hs:100:5)/1","exampleFun2(./Example/File.hs:120:13)/1"]
 -- >   foo: ExampleException
 -- >   HasCallStack backtrace:
 -- >     collectBacktraces, called at (..)
@@ -162,9 +184,9 @@ niPutStrAt is str =
 --
 -- resulting in output such as
 --
--- > ["<./Example/File.hs:131:5>/1"] start
+-- > ["exampleFun(./Example/File.hs:100:5)/1"] start
 -- > ..
--- > ["<./Example/File.hs:131:5>/1"] ExitCaseSuccess ()
+-- > ["exampleFun(./Example/File.hs:100:5)/1"] ExitCaseSuccess ()
 --
 -- When nesting calls to 'niBracket', it can be useful to combine the uniques
 -- in order to get better correlation:
@@ -176,13 +198,13 @@ niPutStrAt is str =
 --
 -- resulting in output such as
 --
--- > ["<./Example/File.hs:131:5>/1"] start
+-- > ["exampleFun(./Example/File.hs:100:5)/1"] start
 -- > ..
--- > ["<./Example/File.hs:131:5>/1","<./Example/File.hs:125:13>/1"] start
+-- > ["exampleFun(./Example/File.hs:100:5)/1","exampleFun(./Example/File.hs:120:13)/1"] start
 -- > ..
--- > ["<./Example/File.hs:131:5>/1","<./Example/File.hs:125:13>/1"] ExitCaseSuccess ()
+-- > ["exampleFun(./Example/File.hs:100:5)/1","exampleFun(./Example/File.hs:120:13)/1"] ExitCaseSuccess ()
 -- > ..
--- > ["<./Example/File.hs:131:5>/1"] ExitCaseSuccess ()
+-- > ["exampleFun(./Example/File.hs:100:5)/1"] ExitCaseSuccess ()
 --
 -- NOTE: We provide an (orphan) 'Functor' instance for 'ExitCase', which can
 -- be useful in cases where @a@ is not showable.
@@ -207,29 +229,29 @@ deriving stock instance Functor ExitCase
   Internal: callsites
 -------------------------------------------------------------------------------}
 
-data CallSite =
-    CallSite SrcLoc
-  | UnknownCallSite
+data CallSite = CallSite {
+      calledFromLoc :: SrcLoc
+    , calledFromFn  :: Maybe String
+    }
   deriving stock (Eq)
 
 prettyCallSite :: CallSite -> String
-prettyCallSite UnknownCallSite = "<unknown>"
-prettyCallSite (CallSite loc)  = concat [
-      "<"
+prettyCallSite CallSite{calledFromLoc, calledFromFn} = concat [
+      case calledFromFn of
+         Nothing -> "<unknown>"
+         Just fn -> fn
+    , "("
     , intercalate ":" [
-        srcLocFile loc
-      , show $ srcLocStartLine loc
-      , show $ srcLocStartCol loc
-      ]
-    , ">"
+          srcLocFile calledFromLoc
+        , show $ srcLocStartLine calledFromLoc
+        , show $ srcLocStartCol calledFromLoc
+        ]
+    , ")"
     ]
 
 instance Hashable CallSite where
-  hashWithSalt salt = hashWithSalt salt . aux
-    where
-      aux :: CallSite -> Maybe String
-      aux (CallSite loc)  = Just $ prettySrcLoc loc
-      aux UnknownCallSite = Nothing
+  hashWithSalt salt CallSite{calledFromLoc, calledFromFn} =
+      hashWithSalt salt (prettySrcLoc calledFromLoc, calledFromFn)
 
 callSite :: HasCallStack => CallSite
 callSite = aux callStack
@@ -237,8 +259,9 @@ callSite = aux callStack
     aux :: CallStack -> CallSite
     aux cs =
         case getCallStack cs of
-          (_, loc) : _ -> CallSite loc
-          []           -> UnknownCallSite
+          (_, loc) : []          -> CallSite loc Nothing
+          (_, loc) : (fn, _) : _ -> CallSite loc (Just fn)
+          []                     -> bug "callSite: emptycallstack"
 
 {-------------------------------------------------------------------------------
   Internal: globals
@@ -261,3 +284,13 @@ niHandle = unsafePerformIO $ do
 niUniques :: IORef (HashMap CallSite Int)
 {-# NOINLINE niUniques #-}
 niUniques = unsafePerformIO $ newIORef HashMap.empty
+
+{-------------------------------------------------------------------------------
+  Internal auxiliary
+-------------------------------------------------------------------------------}
+
+bug :: String -> a
+bug str = error . unlines $ [
+      str
+    , "Please report this as a bug at https://github.com/well-typed/niio"
+    ]

@@ -50,16 +50,16 @@ For example:
 might result in
 
 ```
-["<./Example/File.hs:131:5>/1"] start
-["<./Example/File.hs:131:5>/1","<./Example/File.hs:125:13>/1"] start
-["<./Example/File.hs:131:5>/1","<./Example/File.hs:125:13>/1"]
-  foo: ExampleException
-  HasCallStack backtrace:
-    collectBacktraces, called at (..)
-    toExceptionWithBacktrace, called at (..)
-    throwIO, called at (..)
-["<./Example/File.hs:131:5>/1","<./Example/File.hs:125:13>/1"] ExitCaseSuccess ()
-["<./Example/File.hs:131:5>/1"] ExitCaseSuccess ()
+-- > ["exampleFun(./Example/File.hs:100:5)/1"] start
+-- > ["exampleFun(./Example/File.hs:100:5)/1","exampleFun(./Example/File.hs:120:13)/1"] start
+-- > ["exampleFun(./Example/File.hs:100:5)/1","exampleFun(./Example/File.hs:120:13)/1"]
+-- >   foo: ExampleException
+-- >   HasCallStack backtrace:
+-- >     collectBacktraces, called at (..)
+-- >     toExceptionWithBacktrace, called at (..)
+-- >     throwIO, called at (..)
+-- > ["exampleFun(./Example/File.hs:100:5)/1","exampleFun(./Example/File.hs:120:13)/1"] ExitCaseSuccess ()
+-- > ["exampleFun(./Example/File.hs:100:5)/1"] ExitCaseSuccess ()
 ```
 
 This package is intended for debugging only.
