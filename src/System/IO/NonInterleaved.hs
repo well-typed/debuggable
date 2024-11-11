@@ -16,7 +16,9 @@ module System.IO.NonInterleaved (
   , niTraceShowM
     -- * Uniques
   , NiUnique -- opaque
+  , niUniqueLabel
   , niGetUnique
+  , niGetLabelledUnique
   , niPutStrAt
     -- * Derived functionality
   , niBracket
@@ -29,6 +31,7 @@ import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import Data.IORef
 import Data.List (intercalate)
+import GHC.Generics (Generic)
 import GHC.Stack
 import System.Environment
 import System.IO
@@ -103,14 +106,32 @@ niTraceShowM = niTraceM . show
   Uniques
 -------------------------------------------------------------------------------}
 
+-- | Optional label for an 'NiUnique'
+data Label = Label String | NoLabel
+  deriving stock (Eq, Generic)
+  deriving anyclass (Hashable)
+
 -- | Unique value
 --
 -- See 'niGetUnique'.
-data NiUnique = NiUnique CallSite Int
+data NiUnique = NiUnique (CallSite, Label) Int
   deriving stock (Eq)
 
+-- | Label associated with this 'NiUnique', if any
+niUniqueLabel :: NiUnique -> Maybe String
+niUniqueLabel (NiUnique (_, NoLabel) _) = Nothing
+niUniqueLabel (NiUnique (_, Label l) _) = Just l
+
 instance Show NiUnique where
-  show (NiUnique cs i) = "\"" ++ prettyCallSite cs ++ "/" ++ show i ++ "\""
+  show (NiUnique (cs, mLabel) i) = concat [
+        "\""
+      , prettyCallSite cs
+      , case mLabel of
+          NoLabel -> ""
+          Label l -> "/" ++ l
+      , "/" ++ show i
+      , "\""
+      ]
 
 -- | Get a unique value (useful for correlating different log messages)
 --
@@ -140,13 +161,13 @@ instance Show NiUnique where
 -- In this example the 'HasCallStack' constraint on 'someLocalFn' means that
 -- the 'NiUnique' will show @someLocalFn@ instead of @yourFunction@.
 niGetUnique :: (MonadIO m, HasCallStack) => m NiUnique
-niGetUnique = withFrozenCallStack $
-    liftIO $ atomicModifyIORef niUniques $ \uniques ->
-      let
-        cs = callSite
-        i  = HashMap.findWithDefault 1 callSite uniques
-      in
-        (HashMap.insert cs (succ i) uniques, NiUnique cs i)
+niGetUnique = withFrozenCallStack $ niGetUniqueWithLabel NoLabel
+
+-- | Variant of 'niGetUnique' with an additional label
+--
+-- The combination of the call site and the label will determine the unique.
+niGetLabelledUnique :: (MonadIO m, HasCallStack) => String -> m NiUnique
+niGetLabelledUnique l = withFrozenCallStack $ niGetUniqueWithLabel (Label l)
 
 -- | Output with 'NiUnique' prefix
 --
@@ -168,6 +189,16 @@ niPutStrAt is str =
       case lines str of
         [one] -> show is ++ " " ++ one
         many  -> intercalate "\n" $ show is : map ("  " ++) many
+
+-- | Internal generalization of 'niGetUnique' and 'niGetLabelledUnique'
+niGetUniqueWithLabel :: (MonadIO m, HasCallStack) => Label -> m NiUnique
+niGetUniqueWithLabel l = withFrozenCallStack $
+    liftIO $ atomicModifyIORef niUniques $ \uniques ->
+      let
+        cs = callSite
+        i  = HashMap.findWithDefault 1 (cs, l) uniques
+      in
+        (HashMap.insert (cs, l) (succ i) uniques, NiUnique (cs, l) i)
 
 {-------------------------------------------------------------------------------
   Derived functionality
@@ -281,7 +312,7 @@ niHandle = unsafePerformIO $ do
         hPutStrLn stderr $ "niio output to " ++ fp
         newMVar =<< openFile fp WriteMode
 
-niUniques :: IORef (HashMap CallSite Int)
+niUniques :: IORef (HashMap (CallSite, Label) Int)
 {-# NOINLINE niUniques #-}
 niUniques = unsafePerformIO $ newIORef HashMap.empty
 

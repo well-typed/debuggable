@@ -22,7 +22,9 @@ common lang
   build-depends:    base >= 4.14 && < 4.21
 
   default-extensions:
+      DeriveAnyClass
       DeriveFunctor
+      DeriveGeneric
       DerivingStrategies
       GeneralizedNewtypeDeriving
       NamedFieldPuns
