@@ -25,7 +25,7 @@ import qualified Debug.NonInterleavedIO as NIIO
 -------------------------------------------------------------------------------}
 
 -- | Print debug message, showing current scope
-putStrLn :: MonadIO m => String -> m ()
+putStrLn :: (HasCallStack, MonadIO m) => String -> m ()
 putStrLn str = withFrozenCallStack $ do
     scope <- getScope
     here  <- newInvocation callSite
