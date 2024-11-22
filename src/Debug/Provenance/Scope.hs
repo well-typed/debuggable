@@ -1,4 +1,6 @@
 -- | Utilities for tracking scope: nested 'Invocation's
+--
+-- Intended for unqualified import.
 module Debug.Provenance.Scope (
     -- * Thread-local scope
     Scope

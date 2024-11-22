@@ -33,6 +33,7 @@ module Debug.NonInterleavedIO (
 import Prelude hiding (putStr, putStrLn, print)
 
 import Control.Concurrent
+import Control.Exception
 import Control.Monad.IO.Class
 import System.Environment
 import System.IO.Temp (getCanonicalTemporaryDirectory)
@@ -46,7 +47,9 @@ import qualified System.IO as IO
 
 -- | Non-interleaved version of 'Prelude.putStr'
 putStr :: MonadIO m => String -> m ()
-putStr str = liftIO $ withMVar globalHandle $ \h -> IO.hPutStr h str
+putStr str = liftIO $ withMVar globalHandle $ \h -> do
+    IO.hPutStr h str
+    IO.hFlush h
 
 -- | Non-interleaved version of 'Prelude.putStrLn'
 putStrLn :: MonadIO m => String -> m ()
@@ -86,7 +89,7 @@ traceShowM = traceM . show
 
 globalHandle :: MVar IO.Handle
 {-# NOINLINE globalHandle #-}
-globalHandle = unsafePerformIO $ do
+globalHandle = unsafePerformIO $ uninterruptibleMask_ $ do
     mOutput <- lookupEnv "NIIO_OUTPUT"
     (fp, h) <- case mOutput of
                  Nothing -> do
@@ -96,5 +99,4 @@ globalHandle = unsafePerformIO $ do
                    (fp,) <$> IO.openFile fp IO.WriteMode
     IO.hPutStrLn IO.stderr $ "niio output to " ++ fp
     IO.hFlush IO.stderr
-    IO.hSetBuffering h IO.NoBuffering
     newMVar h

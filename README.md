@@ -1,4 +1,4 @@
-# `debuggable`: utilities for making your applications more debuggable.
+# `debuggable`: utilities for making your applications easier to debug.
 
 This package provides various utilities that can be used to make your
 application easier to debug. Some of these tools are intended for use during
