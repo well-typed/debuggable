@@ -1,7 +1,13 @@
 cabal-version:   3.0
-name:            niio
+name:            debuggable
 version:         0.1.0
-synopsis:        Functions for debugging that guarantee non-interleaved output
+synopsis:        Utilities for making your applications more debuggable.
+description:     This package provides various utilities that can be used to
+                 make your application easier to debug. Some of these tools are
+                 intended for use during actual debugging only (similar to
+                 @Debug.Trace@, for example). Other tools can be used as a
+                 regular component in your application, to facilitate debugging
+                 if and when necessary, but always present in your code.
 license:         BSD-3-Clause
 license-file:    LICENSE
 author:          Edsko de Vries
@@ -28,14 +34,23 @@ common lang
       DerivingStrategies
       GeneralizedNewtypeDeriving
       NamedFieldPuns
+      ScopedTypeVariables
       StandaloneDeriving
+      TupleSections
 
 library
-  import:          lang
-  exposed-modules: System.IO.NonInterleaved
-  hs-source-dirs:  src
+  import:         lang
+  hs-source-dirs: src
+
+  exposed-modules:
+    Debug.NonInterleavedIO
+    Debug.NonInterleavedIO.Scoped
+    Debug.NonInterleavedIO.Trace
+    Debug.Provenance
+    Debug.Provenance.Scope
 
   build-depends:
+    , containers           >= 0.6   && < 0.8
     , exceptions           >= 0.9   && < 0.11
     , hashable             >= 1.4   && < 1.6
     , temporary            >= 1.2.1 && < 1.4
