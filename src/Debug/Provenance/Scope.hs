@@ -97,7 +97,9 @@ pushInvocation :: MonadIO m => Invocation -> m ()
 pushInvocation i = modifyThreadLocalScope_ (i:)
 
 popInvocation :: MonadIO m => m ()
-popInvocation = modifyThreadLocalScope_ tail
+popInvocation = modifyThreadLocalScope_ $ \case
+    []  -> error "popInvocation: empty stack"
+    _:s -> s
 
 {-------------------------------------------------------------------------------
   Internal: globals

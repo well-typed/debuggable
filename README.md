@@ -1,6 +1,7 @@
-# `provenance`: utilities for tracking provenance
+# `debuggable`: utilities for making your applications more debuggable.
 
-This package provides utilities that can help track when and where things are
-defined, to aid debugging. It also provides some utilities for non-interleaved
-output, for debugging concurrent code.
-
+This package provides various utilities that can be used to make your
+application easier to debug. Some of these tools are intended for use during
+actual debugging only (similar to `Debug.Trace`, for example). Other tools can
+be used as a regular component in your application, to facilitate debugging if
+and when necessary, but always present in your code.
