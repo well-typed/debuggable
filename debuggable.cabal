@@ -28,15 +28,19 @@ common lang
   build-depends:    base >= 4.14 && < 4.21
 
   default-extensions:
+      BangPatterns
       DeriveAnyClass
       DeriveFunctor
       DeriveGeneric
       DerivingStrategies
       GeneralizedNewtypeDeriving
+      LambdaCase
       NamedFieldPuns
+      RankNTypes
       ScopedTypeVariables
       StandaloneDeriving
       TupleSections
+      TypeApplications
 
 library
   import:         lang
@@ -47,6 +51,7 @@ library
     Debug.NonInterleavedIO.Scoped
     Debug.NonInterleavedIO.Trace
     Debug.Provenance
+    Debug.Provenance.Callback
     Debug.Provenance.Scope
 
   build-depends:
@@ -55,3 +60,6 @@ library
     , hashable             >= 1.4   && < 1.6
     , temporary            >= 1.2.1 && < 1.4
     , unordered-containers >= 0.2   && < 0.3
+
+  other-extensions:
+      ImplicitParams
