@@ -9,6 +9,8 @@ module Debug.Provenance.Scope (
     -- * Scope across threads
   , forkInheritScope
   , inheritScope
+    -- *** Convenience re-exports
+  , HasCallStack
   ) where
 
 import Control.Concurrent
@@ -18,14 +20,13 @@ import Control.Monad.IO.Class
 import Data.Bifunctor
 import Data.IORef
 import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Tuple (swap)
 import GHC.Stack
 import System.IO.Unsafe (unsafePerformIO)
 
-import qualified Data.Map.Strict as Map
-
-import Debug.Provenance
+import Debug.Provenance.Internal
 
 {-------------------------------------------------------------------------------
   Scope
@@ -37,9 +38,9 @@ import Debug.Provenance
 type Scope = [Invocation]
 
 -- | Extend current scope
-scoped :: (HasCallStack, MonadMask m, MonadIO m) => CallSite -> m a -> m a
-scoped cs k = (\(a, ()) -> a) <$> do
-    i <- newInvocation cs
+scoped :: (HasCallStack, MonadMask m, MonadIO m) => m a -> m a
+scoped k =  (\(a, ()) -> a) <$> do
+    i <- newInvocationFrom callSite -- the call to 'scoped'
     generalBracket
       (pushInvocation i)
       (\_ _ -> popInvocation)

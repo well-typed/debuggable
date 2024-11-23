@@ -1,10 +1,8 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
-
 -- | Utilities for writing debugging messages that include provenance
 --
 -- Intended for qualified import.
 --
--- > import qualified Debug.NonInterleavedIO.Scoped as Scoped
+-- > import Debug.NonInterleavedIO.Scoped qualified as Scoped
 module Debug.NonInterleavedIO.Scoped (
     putStrLn
   ) where
@@ -13,12 +11,10 @@ import Prelude hiding (putStrLn)
 
 import Control.Monad.IO.Class
 import Data.List (intercalate)
-import GHC.Stack
 
-import Debug.Provenance
+import Debug.NonInterleavedIO qualified as NIIO
+import Debug.Provenance.Internal
 import Debug.Provenance.Scope
-
-import qualified Debug.NonInterleavedIO as NIIO
 
 {-------------------------------------------------------------------------------
   Uniques
@@ -26,12 +22,16 @@ import qualified Debug.NonInterleavedIO as NIIO
 
 -- | Print debug message, showing current scope
 putStrLn :: (HasCallStack, MonadIO m) => String -> m ()
-putStrLn str = withFrozenCallStack $ do
+putStrLn str = do
     scope <- getScope
-    here  <- newInvocation callSite
+    here  <- newInvocationFrom callSite -- the call to 'putStrLn'
 
     let prettyScope :: String
-        prettyScope = intercalate "," $ map prettyInvocation (here : scope)
+        prettyScope = concat [
+            "["
+          , intercalate ", " $ map prettyInvocation (here : scope)
+          , "]"
+          ]
 
     NIIO.putStrLn $
       case lines str of

@@ -1,16 +1,19 @@
 {-# LANGUAGE ImplicitParams #-}
-{-# OPTIONS_GHC -ddump-simpl -dsuppress-all -ddump-to-file #-}
 
 -- | Provenance for callbacks
 module Debug.Provenance.Callback (
+    -- * Callbacks
     Callback -- opaque
   , callback
   , invokeCallback
+    -- *** Convenience re-exports
+  , HasCallStack
   ) where
 
+import Data.Maybe (fromMaybe)
 import GHC.Stack
 
-import Debug.Provenance
+import Debug.Provenance.Internal
 
 {-------------------------------------------------------------------------------
   Callback
@@ -51,21 +54,34 @@ newtype Callback m a b = Wrap (Callback_ CallStack m a b)
 -- See 'Callback' for discussion and motivation of the /two/ 'HasCallStack'
 -- constraints.
 callback :: HasCallStack => (HasCallStack => a -> m b) -> Callback m a b
-callback callbackFn = withFrozenCallStack $ Wrap (callback_ callbackFn)
+callback callbackFn = Wrap (callback_ callSite callbackFn)
 
 -- | Invoke 'Callback'
 invokeCallback :: HasCallStack => Callback m a b -> a -> m b
-invokeCallback (Wrap cb) a = invoke_ aux cb a
+invokeCallback (Wrap cb) a =
+    callbackFunction (aux callStack) a
   where
-    aux :: CallSite -> CallStack -> CallStack
-    aux defSite = mapCallSites $ \cs ->
+    Callback_{callbackFunction, callbackDefSite} = cb
+
+    aux :: CallStack -> CallStack
+    aux = mapCallSites $ \cs ->
         case cs of
-          (_, loc):cs' -> -- this is the call to invoke_
-              ( "invoking callback defined at " ++ prettyCallSite defSite
+          (_, loc):cs' -> -- this is the call to invokeCallback
+              ( concat [
+                    "invoking callback defined at "
+                    -- callee is 'callback', no point showing that
+                  , fromMaybe "{unknown}" $
+                      callSiteCaller callbackDefSite
+                  , maybe "" (\l -> " (" ++ briefSrcLoc l ++ ")") $
+                      callSiteSrcLoc callbackDefSite
+
+                  ]
+                --      "invoking callback defined at "
+                -- ++ prettyCallSite callbackDefSite
               , loc
               )
             : cs'
-          _otherwise ->
+          [] ->
             error $ "invokeCallback: unexpected CallStack"
 
 {-# NOINLINE callback #-}
@@ -85,28 +101,16 @@ data Callback_ cs m a b = Callback_ {
     }
 
 callback_ :: forall cs m a b.
-     HasCallStack
-  => ((?callStack :: cs) => a -> m b)
+     CallSite
+  -> ((?callStack :: cs) => a -> m b)
   -> Callback_ cs m a b
-callback_ f = Callback_ (mkExplicit f) callSite
-
-invoke_ ::
-     (?callStack :: cs)
-  => (CallSite -> cs -> cs)
-  -> Callback_ cs m a b -> a -> m b
-invoke_ g Callback_{callbackFunction = fn, callbackDefSite = defSite} a =
-    mkImplicit (\cs -> fn (g defSite cs) a)
+callback_ defSite f = Callback_ (mkExplicit f) defSite
 
 mkExplicit :: ((?callStack :: cs) => a) -> (cs -> a)
 mkExplicit f cs = let ?callStack = cs in f
 
-mkImplicit :: (?callStack :: cs) => (cs -> a) -> a
-mkImplicit f = f ?callStack
-
 {-# NOINLINE callback_  #-}
-{-# NOINLINE invoke_    #-}
 {-# NOINLINE mkExplicit #-}
-{-# NOINLINE mkImplicit #-}
 
 {-------------------------------------------------------------------------------
   Internal: manipulating the callstack

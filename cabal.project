@@ -1,0 +1,4 @@
+packages: .
+
+package debuggable
+  tests: True

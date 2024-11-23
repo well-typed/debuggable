@@ -1,5 +1,5 @@
-# Revision history for non-interleaved-logging
+# Revision history for debuggable
 
-## 0.1.0 -- YYYY-mm-dd
+## 0.1.0 -- 2024-11-23
 
-* First version. Released on an unsuspecting world.
+* First public release

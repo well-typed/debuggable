@@ -1,0 +1,5 @@
+packages: .
+
+package debuggable
+  tests: True
+  ghc-options: -Werror
