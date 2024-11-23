@@ -22,9 +22,12 @@ tested-with:     GHC==8.10.7
                , GHC==9.8.2
                , GHC==9.10.1
 
+source-repository head
+  type:     git
+  location: https://github.com/well-typed/debuggable
+
 common lang
   default-language: Haskell2010
-  ghc-options:      -Wall
   build-depends:    base >= 4.14 && < 4.21
 
   default-extensions:
@@ -34,13 +37,26 @@ common lang
       DeriveGeneric
       DerivingStrategies
       GeneralizedNewtypeDeriving
+      ImportQualifiedPost
       LambdaCase
       NamedFieldPuns
+      NumericUnderscores
       RankNTypes
       ScopedTypeVariables
       StandaloneDeriving
       TupleSections
       TypeApplications
+
+  ghc-options:
+      -Wall
+      -Wredundant-constraints
+      -Wprepositive-qualified-module
+      -Widentities
+      -Wmissing-export-lists
+
+  if impl(ghc >= 9.0)
+    ghc-options:
+      -Wunused-packages
 
 library
   import:         lang
@@ -54,6 +70,9 @@ library
     Debug.Provenance.Callback
     Debug.Provenance.Scope
 
+  other-modules:
+    Debug.Provenance.Internal
+
   build-depends:
     , containers           >= 0.6   && < 0.8
     , exceptions           >= 0.9   && < 0.11
@@ -63,3 +82,33 @@ library
 
   other-extensions:
       ImplicitParams
+
+test-suite demo
+  import:         lang
+  type:           exitcode-stdio-1.0
+  main-is:        Demo.hs
+  hs-source-dirs: demo
+
+  ghc-options:
+      -main-is Demo
+      -rtsopts
+      -threaded
+      "-with-rtsopts=-N"
+
+  other-modules:
+      Cmdline
+      Demo.Callback
+      Demo.Callsite
+      Demo.Invocation
+      Demo.NIIO
+      Demo.Scope
+
+  build-depends:
+      -- inherited dependencies
+      debuggable
+
+  build-depends:
+      -- additional dependencies
+    , async                >= 2.2  && < 2.3
+    , optparse-applicative >= 0.18 && < 0.19
+

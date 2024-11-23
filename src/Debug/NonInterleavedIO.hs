@@ -2,7 +2,7 @@
 --
 -- Intended for qualifed import.
 --
--- > import qualified Debug.NonInterleavedIO as NIIO
+-- > import Debug.NonInterleavedIO qualified as NIIO
 --
 -- Alternatively, you can import "Debug.NonInterleavedIO.Trace" as a drop-in
 -- replacement for "Debug.Trace".
@@ -36,10 +36,9 @@ import Control.Concurrent
 import Control.Exception
 import Control.Monad.IO.Class
 import System.Environment
+import System.IO qualified as IO
 import System.IO.Temp (getCanonicalTemporaryDirectory)
 import System.IO.Unsafe
-
-import qualified System.IO as IO
 
 {-------------------------------------------------------------------------------
   Output functions
