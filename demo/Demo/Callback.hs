@@ -6,6 +6,8 @@ import Debug.NonInterleavedIO.Scoped qualified as Scoped
 import Debug.Provenance.Callback
 import Debug.Provenance.Scope
 
+import Demo.Callback.Profiling qualified as Profiling
+
 {-------------------------------------------------------------------------------
   Top-level
 -------------------------------------------------------------------------------}
@@ -13,11 +15,13 @@ import Debug.Provenance.Scope
 data Example =
     WithoutDebuggable
   | UseDebuggable
+  | UseProfiling (Maybe Int)
   deriving stock (Show)
 
 demo :: Example -> IO ()
 demo WithoutDebuggable = f1 g1
 demo UseDebuggable     = h1 (callback g1)
+demo (UseProfiling i)  = Profiling.demo i
 
 {-------------------------------------------------------------------------------
   Without the library

@@ -141,6 +141,14 @@ parseCallbackExample = subparser $ mconcat [
         "use-debuggable"
         (pure Callback.UseDebuggable)
         "Use debuggable"
+    , command'
+        "use-profiling-1"
+        (pure $ Callback.UseProfiling Nothing)
+        "Use profiling, example 1"
+    , command'
+        "use-profiling-2"
+        (Callback.UseProfiling . Just <$> argument auto (metavar "INT"))
+        "Use profiling, example 2"
     ]
 
 {-------------------------------------------------------------------------------
