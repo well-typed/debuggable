@@ -15,13 +15,9 @@ main = do
       Nothing   -> putStrLn "Please select a demo (see --help)"
       Just demo ->
         case demo of
-          DemoNiioWithout       -> NIIO.withoutDebuggable
-          DemoNiioUse           -> NIIO.useDebuggable
-          DemoCallsiteWithout   -> Callsite.withoutDebuggable
-          DemoCallsiteUse       -> Callsite.useDebuggable
-          DemoInvocationWithout -> Invocation.withoutDebuggable
-          DemoInvocationUse ex  -> Invocation.useDebuggable ex
-          DemoScopeUse ex       -> Scope.useDebuggable ex
-          DemoCallbackWithout   -> Callback.withoutDebuggable
-          DemoCallbackUse       -> Callback.useDebuggable
+          DemoNiio       ex -> NIIO.demo       ex
+          DemoCallsite   ex -> Callsite.demo   ex
+          DemoInvocation ex -> Invocation.demo ex
+          DemoScope      ex -> Scope.demo      ex
+          DemoCallback   ex -> Callback.demo   ex
 

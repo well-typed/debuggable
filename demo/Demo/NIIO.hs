@@ -1,7 +1,4 @@
-module Demo.NIIO (
-    withoutDebuggable
-  , useDebuggable
-  ) where
+module Demo.NIIO (Example(..), demo) where
 
 import Control.Concurrent
 import Control.Concurrent.Async
@@ -9,6 +6,19 @@ import Control.Monad
 import System.IO
 
 import Debug.NonInterleavedIO qualified as NIIO
+
+{-------------------------------------------------------------------------------
+  Top-level
+-------------------------------------------------------------------------------}
+
+data Example =
+    WithoutDebuggable
+  | UseDebuggable
+  deriving stock (Show)
+
+demo :: Example -> IO ()
+demo WithoutDebuggable = withoutDebuggable
+demo UseDebuggable     = useDebuggable
 
 {-------------------------------------------------------------------------------
   Without the library

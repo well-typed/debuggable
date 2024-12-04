@@ -1,7 +1,4 @@
-module Demo.Scope (
-    Example(..)
-  , useDebuggable
-  ) where
+module Demo.Scope (Example(..), demo) where
 
 import Control.Concurrent
 import Control.Concurrent.Async
@@ -10,7 +7,7 @@ import Debug.NonInterleavedIO.Scoped qualified as Scoped
 import Debug.Provenance.Scope
 
 {-------------------------------------------------------------------------------
-  Using the library
+  Top-level
 -------------------------------------------------------------------------------}
 
 data Example =
@@ -19,6 +16,16 @@ data Example =
   | Example3
   | Example4
   deriving (Show)
+
+demo :: Example -> IO ()
+demo Example1 = g4
+demo Example2 = g1
+demo Example3 = concurrent
+demo Example4 = h1
+
+{-------------------------------------------------------------------------------
+  Using the library
+-------------------------------------------------------------------------------}
 
 g1 :: IO ()
 g1 = g2
@@ -52,9 +59,3 @@ h3 = scoped $ do
     concurrently_
       (inheritScope tid >> g4)
       (inheritScope tid >> g4)
-
-useDebuggable :: Example -> IO ()
-useDebuggable Example1 = g4
-useDebuggable Example2 = g1
-useDebuggable Example3 = concurrent
-useDebuggable Example4 = h1
