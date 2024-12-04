@@ -1,17 +1,31 @@
 module Demo.Invocation (
     Example(..)
-  , withoutDebuggable
-  , useDebuggable
+  , DebuggableExample(..)
+  , demo
   ) where
 
 import Control.Monad
 
 import Debug.Provenance
 
+{-------------------------------------------------------------------------------
+  Top-level
+-------------------------------------------------------------------------------}
+
 data Example =
+    WithoutDebuggable
+  | UseDebuggable DebuggableExample
+  deriving stock (Show)
+
+data DebuggableExample =
     Example1
   | Example2
   deriving stock (Show)
+
+demo :: Example -> IO ()
+demo WithoutDebuggable        = f4
+demo (UseDebuggable Example1) = g1
+demo (UseDebuggable Example2) = g4
 
 {-------------------------------------------------------------------------------
   Without the library
@@ -24,9 +38,6 @@ f4 = do
     putStrLn "f4:2"
     -- f4 does something else ..
     putStrLn "f4:3"
-
-withoutDebuggable :: IO ()
-withoutDebuggable = f4
 
 {-------------------------------------------------------------------------------
   Using the library
@@ -50,7 +61,3 @@ g4 = do
     print =<< newInvocation
     -- f4 does something else ..
     print =<< newInvocation
-
-useDebuggable :: Example -> IO ()
-useDebuggable Example1 = g1
-useDebuggable Example2 = g4

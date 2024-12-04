@@ -98,6 +98,7 @@ test-suite demo
   other-modules:
       Cmdline
       Demo.Callback
+      Demo.Callback.Profiling
       Demo.Callsite
       Demo.Invocation
       Demo.NIIO
